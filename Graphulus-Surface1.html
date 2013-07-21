@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Graphulus: Parametric Surfaces (Three.js)</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link rel=stylesheet href="css/base.css"/>
+</head>
+<body>
+
+<script src="js/Three.js"></script>
+<script src="js/Detector.js"></script>
+<script src="js/Stats.js"></script>
+<script src="js/TrackballControls.js"></script>
+<script src="js/THREEx.KeyboardState.js"></script>
+<script src="js/THREEx.FullScreen.js"></script>
+<script src="js/THREEx.WindowResize.js"></script>
+
+<script type='text/javascript' src='js/DAT.GUI.min.js'></script>
+
+<script type='text/javascript' src='js/Three.plot.js'></script>
+  
+<!-- http://silentmatt.com/javascript-expression-evaluator/ -->
+<script src="js/parser.js"></script>
+
+<!-- jQuery code to display an information button and box when clicked. -->
+<script src="js/jquery-1.9.1.js"></script>
+<script src="js/jquery-ui.js"></script>
+<link rel=stylesheet href="css/jquery-ui.css" />
+<link rel=stylesheet href="css/info.css"/>
+<script src="js/info.js"></script>
+<div id="infoButton"></div>
+<div id="infoBox" title="Demo Information">
+This three.js demo is part of a collection at
+<a href="http://stemkoski.github.io/Three.js/">http://stemkoski.github.io/Three.js/</a>
+</div>
+<!-- ------------------------------------------------------------ -->
+
+<div id="ThreeJS" style="position: absolute; left:0px; top:0px"></div>
+<script>
+/*
+	Three.js "tutorials by example"
+	Author: Lee Stemkoski
+	Date: July 2013 (three.js v59dev)
+*/
+/**
+ * @author mrdoob / http://mrdoob.com/
+ * based on http://papervision3d.googlecode.com/svn/trunk/as3/trunk/src/org/papervision3d/objects/primitives/Cube.as
+ */
+
+// MAIN
+var projector, mouse = { x: 0, y: 0 }, INTERSECTED, oldPosition;
+var sprite1;
+var canvas1, context1, texture1;
+
+// standard global variables
+var container, scene, camera, renderer, controls, stats;
+var keyboard = new THREEx.KeyboardState();
+var clock = new THREE.Clock();
+
+// custom global variables
+var gui, gui_xText, gui_yText, gui_zText,
+	gui_uMin, gui_uMax, gui_vMin, gui_vMax,
+	gui_a, gui_b, gui_c, gui_d,
+	gui_segments;
+
+var xFuncText = "u^2 + sin(v)";
+var xFunc = Parser.parse(xFuncText).toJSFunction( ['u','v'] );
+var yFuncText = "u^2 + sin(v)";
+var yFunc = Parser.parse(yFuncText).toJSFunction( ['u','v'] );
+var zFuncText = "u^2 + sin(v)";
+var zFunc = Parser.parse(zFuncText).toJSFunction( ['u','v'] );
+
+// parameters for the equations
+var a = 0.01, b = 0.01, c = 0.01, d = 0.01;
+
+var meshFunction;
+var segments = 50,
+	uMin = 0.01, uMax = 0.02, uRange = uMax - uMin,
+	vMin = 0.01, vMax = 0.02, vRange = vMax - vMin,
+	zMin = -10, zMax = 10, zRange = zMax - zMin;
+
+var xMin = xMax = yMin = yMax = 0; // for autosizing window
+
+var graphGeometry;
+var gridMaterial, wireMaterial, vertexColorMaterial;
+var graphMesh;
+var box, wireframeHelper ;
+
+init();
+animate();
+
+// FUNCTIONS
+function init()
+{
+	// SCENE
+	scene = new THREE.Scene();
+	// CAMERA
+  var SCREEN_WIDTH = window.innerWidth , SCREEN_HEIGHT = window.innerHeight;
+	var VIEW_ANGLE = 45, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
+	camera = new THREE.PerspectiveCamera( VIEW_ANGLE, ASPECT, NEAR, FAR);
+	scene.add(camera);
+	camera.position.set(0,150,400);
+	camera.lookAt(scene.position);
+	// RENDERER
+	if ( Detector.webgl )
+		renderer = new THREE.WebGLRenderer( {antialias:true} );
+	else
+		renderer = new THREE.CanvasRenderer();
+	renderer.setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
+	container = document.getElementById( 'ThreeJS' );
+	container.appendChild( renderer.domElement );
+	// EVENTS
+	THREEx.WindowResize(renderer, camera);
+	THREEx.FullScreen.bindKey({ charCode : 'm'.charCodeAt(0) });
+	// CONTROLS
+	controls = new THREE.TrackballControls( camera, renderer.domElement );
+	// STATS
+	stats = new Stats();
+	stats.domElement.style.position = 'absolute';
+	stats.domElement.style.bottom = '0px';
+	stats.domElement.style.zIndex = 100;
+	container.appendChild( stats.domElement );
+	// LIGHT
+	var light = new THREE.PointLight(0xffffff);
+	light.position.set(0,250,0);
+	scene.add(light);
+	// SKYBOX/FOG
+	scene.fog = new THREE.FogExp2( 0x888888, 0.0025 );
+	////////////
+	// CUSTOM //
+	////////////
+
+  //scene.add( new THREE.AxisHelper() );
+
+	// wireframe for xy-plane
+	var wireframeMaterial = new THREE.MeshBasicMaterial( { color: 0x000088, wireframe: true, side:THREE.DoubleSide } );
+	var floorGeometry = new THREE.PlaneGeometry(100,100,10,10);
+	var floor = new THREE.Mesh(floorGeometry, wireframeMaterial);
+	floor.position.z = -0.01;
+	// rotate to lie in x-y plane
+	// floor.rotation.x = Math.PI / 2;
+  //scene.add(floor);
+
+	var normMaterial = new THREE.MeshNormalMaterial;
+	var shadeMaterial = new THREE.MeshLambertMaterial( { color: 0xff0000 } );
+
+	// "wireframe texture"
+	var wireTexture = new THREE.ImageUtils.loadTexture( 'images/square.png' );
+	wireTexture.wrapS = wireTexture.wrapT = THREE.RepeatWrapping;
+	wireTexture.repeat.set( 20, 20 );
+	wireMaterial = new THREE.MeshBasicMaterial( { map: wireTexture, vertexColors: THREE.VertexColors, side:THREE.DoubleSide } );
+
+	var vertexColorMaterial  = new THREE.MeshBasicMaterial( { vertexColors: THREE.VertexColors } );
+
+	// Background clear color
+	// renderer.setClearColorHex( 0x888888, 1 );
+
+	///////////////////
+	//   GUI SETUP   //
+	///////////////////
+
+	gui = new dat.GUI();
+
+	parameters =
+	{
+		resetCam:  function() { resetCamera(); },
+		preset1:   function() { preset01(); },
+		graphFunc: function() { createGraph(); },
+		finalValue: 337
+	};
+
+	// GUI -- equation
+	gui_zText = gui.add( this, 'zFuncText' ).name('z = h(u,v) = ');
+	gui_uMin = gui.add( this, 'uMin' ).name('u Minimum = ');
+	gui_uMax = gui.add( this, 'uMax' ).name('u Maximum = ');
+	gui_vMin = gui.add( this, 'vMin' ).name('v Minimum = ');
+	gui_vMax = gui.add( this, 'vMax' ).name('v Maximum = ');
+	gui_segments = gui.add( this, 'segments' ).name('Subdivisions = ');
+
+	// GUI -- parameters
+	var gui_parameters = gui.addFolder('Parameters');
+	a = b = c = d = 0.01;
+	gui_a = gui_parameters.add( this, 'a' ).min(-5).max(5).step(0.01).name('a = ');
+	gui_a.onChange( function(value) { createGraph(); } );
+	gui_b = gui_parameters.add( this, 'b' ).min(-5).max(5).step(0.01).name('b = ');
+	gui_b.onChange( function(value) { createGraph(); } );
+	gui_c = gui_parameters.add( this, 'c' ).min(-5).max(5).step(0.01).name('c = ');
+	gui_c.onChange( function(value) { createGraph(); } );
+	gui_d = gui_parameters.add( this, 'd' ).min(-5).max(5).step(0.01).name('d = ');
+	gui_d.onChange( function(value) { createGraph(); } );
+	gui_a.setValue(1);
+	gui_b.setValue(1);
+	gui_c.setValue(1);
+	gui_d.setValue(1);
+
+	// GUI -- preset equations
+	var gui_preset = gui.addFolder('Preset equations');
+	gui_preset.add( parameters, 'preset1' ).name('Torus');
+
+	gui.add( parameters, 'resetCam' ).name("Reset Camera");
+	gui.add( parameters, 'graphFunc' ).name("Graph Function");
+
+	preset01();
+}
+
+function createGraph()
+{
+	uRange = uMax - uMin;
+	vRange = vMax - vMin;
+	zFunc = Parser.parse(zFuncText).toJSFunction( ['u','v'] );
+  
+  var data = [], labelX = [], labelY = [];
+  for (var j = 0; j < segments; j++) labelY[j] = vRange * j/segments + vMin;
+  for (var i = 0; i < segments; i++)
+  {
+    data[i] = [];
+    labelX[i] = uRange * i/segments + uMin;
+    for (var j = 0; j < segments; j++)
+    {
+      data[i][j] = zFunc(labelX[i],labelY[j]);//Math.sqrt(Math.sqrt(labelX[i] * labelX[i] + labelX[j] * labelX[j] )); //
+      //sin(sqrt(a*x^2  + b*y^2))
+    }
+  }   
+  graphGeometry = new THREE.SurfGeometry( data, labelX, labelY, true );
+	///////////////////////////////////////////////
+	// calculate vertex colors based on Z values //
+	///////////////////////////////////////////////
+  setGeometryColor(graphGeometry)
+	///////////////////////
+	// end vertex colors //
+	///////////////////////
+
+	xMin = graphGeometry.boundingBox.min.x;
+	xMax = graphGeometry.boundingBox.max.x;
+	yMin = graphGeometry.boundingBox.min.y;
+	yMax = graphGeometry.boundingBox.max.y;
+
+	// material choices: vertexColorMaterial, wireMaterial , normMaterial , shadeMaterial
+
+	if (graphMesh)
+	{
+		scene.remove( graphMesh );
+
+		// renderer.deallocateObject( graphMesh );
+	}
+  if (box) scene.remove( box );
+  if (wireframeHelper) scene.remove(wireframeHelper);
+	wireMaterial.map.repeat.set( segments, segments );
+
+	graphMesh = new THREE.Mesh( graphGeometry, wireMaterial );
+	graphMesh.doubleSided = true;
+  graphMesh.name = 'graphMesh';
+  graphMesh.position = new THREE.Vector3(0,0,4);
+	scene.add(graphMesh);
+  box = new THREE.BoundBoxHelper(graphMesh);
+
+  scene.add(box);
+  wireframeHelper = new THREE.VertexTangentsHelper  (graphMesh);
+  scene.add(wireframeHelper);
+ // initialize object to perform world/screen calculations
+	projector = new THREE.Projector();
+
+	// when the mouse moves, call the given function
+	document.addEventListener( 'mousemove', onDocumentMouseMove, false );
+	/////// draw text on canvas /////////
+
+	// create a canvas element
+	canvas1 = document.createElement('canvas');
+	context1 = canvas1.getContext('2d');
+	context1.font = "Bold 20px Arial";
+	context1.fillStyle = "rgba(0,0,0,0.95)";
+  context1.fillText('Hello, world!', 0, 100);
+
+	// canvas contents will be used for a texture
+	texture1 = new THREE.Texture(canvas1)
+	texture1.needsUpdate = true;
+
+	////////////////////////////////////////
+
+	var spriteMaterial = new THREE.SpriteMaterial( { map: texture1, useScreenCoordinates: true, alignment: THREE.SpriteAlignment.topLeft } );
+
+	sprite1 = new THREE.Sprite( spriteMaterial );
+	sprite1.scale.set(200,100,1.0);
+	sprite1.position.set( 50, 50, 0 );
+	scene.add( sprite1 );
+}
+function setGeometryColor(geometry)
+{
+  geometry.computeBoundingBox();
+	zMin = geometry.boundingBox.min.z;
+	zMax = geometry.boundingBox.max.z;
+	zRange = zMax - zMin;
+	var color, point, face, numberOfSides, vertexIndex;
+	// faces are indexed using characters
+	var faceIndices = [ 'a', 'b', 'c', 'd' ];
+	// first, assign colors to vertices as desired
+	for ( var i = 0; i < geometry.vertices.length; i++ )
+	{
+		point = geometry.vertices[ i ];
+		color = new THREE.Color( 0x0000ff );
+		color.setHSL( 0.7 * (zMax - point.z) / zRange, 1, 0.5 );
+		geometry.colors[i] = color; // use this array for convenience
+	}
+	// copy the colors as necessary to the face's vertexColors array.
+	for ( var i = 0; i < geometry.faces.length; i++ )
+	{
+		face = geometry.faces[ i ];
+		numberOfSides = ( face instanceof THREE.Face3 ) ? 3 : 4;
+		for( var j = 0; j < numberOfSides; j++ )
+		{
+			vertexIndex = face[ faceIndices[ j ] ];
+			face.vertexColors[ j ] = geometry.colors[ vertexIndex ];
+		}
+	}
+}
+function onDocumentMouseMove( event )
+{
+	// the following line would stop any other event handler from firing
+	// (such as the mouse's TrackballControls)
+	// event.preventDefault();
+
+	// update sprite position
+	sprite1.position.set( event.clientX, event.clientY - 20, 0 );
+
+	// update the mouse variable
+	mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+	mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+}
+function preset01()
+{
+
+  //gui_zText.setValue("b*sin(v)");
+  gui_zText.setValue("sin(sqrt(a*u^2  + b*v^2))");
+	gui_uMin.setValue(-10); gui_uMax.setValue(10);
+	gui_vMin.setValue(-10); gui_vMax.setValue(10);
+	gui_a.setValue(3);
+	gui_b.setValue(1);
+	gui_segments.setValue(40);
+	createGraph(); resetCamera();
+}
+
+function resetCamera()
+{
+	// CAMERA
+	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
+	var VIEW_ANGLE = 45, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
+	camera = new THREE.PerspectiveCamera( VIEW_ANGLE, ASPECT, NEAR, FAR);
+	camera.position.set( 2*xMax, 0.5*yMax, 4*zMax );
+	camera.up = new THREE.Vector3( 0, 0, 1 );
+	camera.lookAt(scene.position);
+	scene.add(camera);
+
+	controls = new THREE.TrackballControls( camera, renderer.domElement );
+	THREEx.WindowResize(renderer, camera);
+}
+
+function animate()
+{
+    requestAnimationFrame( animate );
+	render();
+	update();
+}
+var intersects;
+function update()
+{
+	// create a Ray with origin at the mouse position
+	//   and direction into the scene (camera direction)
+	var vector = new THREE.Vector3( mouse.x, mouse.y, 1 );
+	projector.unprojectVector( vector, camera );
+	var ray = new THREE.Raycaster( camera.position, vector.sub( camera.position ).normalize() );
+
+	// create an array containing all objects in the scene with which the ray intersects
+	intersects = ray.intersectObjects( scene.children );
+
+	// INTERSECTED = the object in the scene currently closest to the camera
+	//		and intersected by the Ray projected from the mouse position
+
+	// if there is one (or more) intersections
+	if ( intersects.length > 0 )
+	{
+		// if the closest object intersected is not the currently stored intersection object
+		if ( intersects[ 0 ].face != INTERSECTED )
+		{
+      console.log("Hit @ " + toString( intersects[0].point ) );
+      if(oldPosition) console.log(oldPosition.distanceTo( intersects[ 0 ].point ));
+      var logstr = ''; for(var i in intersects[ 0 ].face.vertexNormals) logstr += intersects[ 0 ].point.distanceTo(intersects[ 0 ].face.vertexNormals[i]);
+      console.log(logstr );
+      //intersects[ 0 ].face.color.setRGB( 0.8 * Math.random() + 0.2, 0, 0 );
+      //intersects[ 0 ].object.geometry.colorsNeedUpdate = true;
+		    // restore previous intersection object (if it exists) to its original color
+      //if ( INTERSECTED ) INTERSECTED.material.color.setHex( INTERSECTED.currentHex );
+			// store reference to closest object as current intersection object
+			INTERSECTED = intersects[ 0 ].face;
+      oldPosition = intersects[ 0 ].point;
+			// store color of closest object (for later restoration)
+      //INTERSECTED.currentHex = INTERSECTED.material.color.getHex();
+			// set a new color for closest object
+			//INTERSECTED.material.color.setHex( 0xffff00 );
+
+			// update text, if it has a "name" field.
+			if ( intersects[ 0 ].object.name )
+			{
+			  context1.clearRect(0,0,640,480);
+				var message = intersects[ 0 ].object.name + toString( intersects[ 0 ].point);
+				var metrics = context1.measureText(message);
+				var width = metrics.width;
+				context1.fillStyle = "rgba(0,0,0,0.95)"; // black border
+				context1.fillRect( 0,0, width+8,20+8);
+				context1.fillStyle = "rgba(255,255,255,0.95)"; // white filler
+				context1.fillRect( 2,2, width+4,20+4 );
+				context1.fillStyle = "rgba(0,0,0,1)"; // text color
+				context1.fillText( message, 4,20 );
+				texture1.needsUpdate = true;
+			}
+			else
+			{
+				context1.clearRect(0,0,300,300);
+				texture1.needsUpdate = true;
+			}
+		}
+	}
+	else // there are no intersections
+	{
+		// restore previous intersection object (if it exists) to its original color
+    //if ( INTERSECTED ) INTERSECTED.material.color.setHex( INTERSECTED.currentHex );
+		// remove previous intersection object reference
+		//     by setting current intersection object to "nothing"
+		INTERSECTED = null;
+		context1.clearRect(0,0,300,300);
+		texture1.needsUpdate = true;
+	}
+
+	if ( keyboard.pressed("z") )
+	{
+		// do something
+	}
+
+	controls.update();
+	stats.update();
+}
+  function toString(v) { return "[ " + Math.floor(v.x * 100) / 100 + ", " + Math.floor(v.y * 100) / 100 + ", " + Math.floor(v.z * 100) / 100 + " ]"; }
+function render()
+{
+	renderer.render( scene, camera );
+}
+
+</script>
+
+</body>
+</html>
