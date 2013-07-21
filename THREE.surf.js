@@ -173,9 +173,37 @@ THREE.AxisGeometry = function ( width, height, depth, widthSegments, heightSegme
 
 	this.computeCentroids();
 	this.mergeVertices();
-  setGeometryColor(this);
+  	this.setGeometryColor(this);
 };
-
+THREE.AxisGeometry.prototype.setGeometryColor = function (geometry)
+{
+  	geometry.computeBoundingBox();
+	zMin = geometry.boundingBox.min.z;
+	zMax = geometry.boundingBox.max.z;
+	zRange = zMax - zMin;
+	var color, point, face, numberOfSides, vertexIndex;
+	// faces are indexed using characters
+	var faceIndices = [ 'a', 'b', 'c', 'd' ];
+	// first, assign colors to vertices as desired
+	for ( var i = 0; i < geometry.vertices.length; i++ )
+	{
+		point = geometry.vertices[ i ];
+		color = new THREE.Color( 0x0000ff );
+		color.setHSL( 0.7 * (zMax - point.z) / zRange, 1, 0.5 );
+		geometry.colors[i] = color; // use this array for convenience
+	}
+	// copy the colors as necessary to the face's vertexColors array.
+	for ( var i = 0; i < geometry.faces.length; i++ )
+	{
+		face = geometry.faces[ i ];
+		numberOfSides = ( face instanceof THREE.Face3 ) ? 3 : 4;
+		for( var j = 0; j < numberOfSides; j++ )
+		{
+			vertexIndex = face[ faceIndices[ j ] ];
+			face.vertexColors[ j ] = geometry.colors[ vertexIndex ];
+		}
+	}
+}
 THREE.AxisGeometry.prototype = Object.create( THREE.Geometry.prototype );
 THREE.BoundBoxHelper = function ( object, hex ) {
 
