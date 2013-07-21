@@ -1,5 +1,5 @@
 THREE.SurfGeometry = function (  data, labelX, labelY, useTris) {
-	
+
   THREE.Geometry.call( this );
   this.data = data;
   this.labelX = labelX;
@@ -173,7 +173,7 @@ THREE.AxisGeometry = function ( width, height, depth, widthSegments, heightSegme
 
 	this.computeCentroids();
 	this.mergeVertices();
-  	this.setGeometryColor(this);
+  //this.setGeometryColor(this);
 };
 THREE.AxisGeometry.prototype.setGeometryColor = function (geometry)
 {
@@ -205,10 +205,10 @@ THREE.AxisGeometry.prototype.setGeometryColor = function (geometry)
 	}
 }
 THREE.AxisGeometry.prototype = Object.create( THREE.Geometry.prototype );
-THREE.BoundBoxHelper = function ( object, hex ) {
+THREE.BoundBoxHelper = function (  width, height, depth, position, hex ) {
 
 	var color = hex || 0x888888;
-
+/*
 	this.object = object;
 
 	this.box = new THREE.Box3();
@@ -216,19 +216,117 @@ THREE.BoundBoxHelper = function ( object, hex ) {
   geometry.computeBoundingBox();
   var min = geometry.boundingBox.min;
 	var max = geometry.boundingBox.max;
+  */
   //THREE.Mesh.call( this, new THREE.AxisGeometry( max.x-min.x, max.y-min.y, max.z-min.z ,10,10,10), new THREE.MeshBasicMaterial( { color: color, wireframe: true } ) );
-  THREE.Mesh.call( this, new THREE.AxisGeometry( max.x-min.x, max.y-min.y, max.z-min.z), wireMaterial );
+  
+  THREE.Mesh.call( this, new THREE.AxisGeometry(  width, height, depth, 10,10,10) );
   this.name = 'BoundBox';
-  this.position = object.position;
+  this.position = position;
 };
 
 THREE.BoundBoxHelper.prototype = Object.create( THREE.Mesh.prototype );
-THREE.BoundBoxHelper.prototype.update = function () {
 
-	this.box.setFromObject( this.object );
+THREE.Tooltip = function()
+{
+  this.mouse = {x:0,y:0};
+  this.projector = new THREE.Projector();
+  this.INTERSECTED = null;
+  this.oldPosition = null;
 
-	this.box.size( this.scale );
+	// create a canvas element
+	this.canvas = document.createElement('canvas');
+	this.context = canvas.getContext('2d');
+	this.context.font = "Bold 20px Arial";
+	this.context.fillStyle = "rgba(0,0,0,0.95)";
+  this.context.fillText('Hello, world!', 0, 100);
 
-	this.box.center( this.position );
+	// canvas contents will be used for a texture
+	this.texture = new THREE.Texture(canvas)
+	this.texture.needsUpdate = true;
 
-};
+	////////////////////////////////////////
+
+	var spriteMaterial = new THREE.SpriteMaterial( { map: this.texture, useScreenCoordinates: true, alignment: THREE.SpriteAlignment.topLeft } );
+
+	this.sprite = new THREE.Sprite( spriteMaterial );
+	this.sprite.scale.set(200,100,1.0);
+	this.sprite.position.set( 50, 50, 0 );
+	this.add( this.sprite );
+  
+	document.addEventListener( 'mousemove', function( event ) {
+    // event.preventDefault();
+    // update sprite position
+    sprite.position.set( event.clientX, event.clientY - 20, 0 );
+    // update the mouse variable
+    mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+    mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+  }, false );
+
+}
+
+
+THREE.Tooltip.prototype = Object.create( THREE.Object3D.prototype );
+THREE.Tooltip.prototype.update = function()
+{
+	var vector = new THREE.Vector3( mouse.x, mouse.y, 1 );
+	projector.unprojectVector( vector, camera );
+	var ray = new THREE.Raycaster( camera.position, vector.sub( camera.position ).normalize() );
+
+	// create an array containing all objects in the scene with which the ray intersects
+	intersects = ray.intersectObjects( scene.children );
+
+	// INTERSECTED = the object in the scene currently closest to the camera
+	//		and intersected by the Ray projected from the mouse position
+
+	// if there is one (or more) intersections
+	if ( intersects.length > 0 )
+	{
+		// if the closest object intersected is not the currently stored intersection object
+		if ( intersects[ 0 ].face != INTERSECTED )
+		{
+      console.log("Hit @ " + toString( intersects[0].point ) );
+      if(oldPosition) console.log(oldPosition.distanceTo( intersects[ 0 ].point ));
+      var logstr = ''; for(var i in intersects[ 0 ].face.vertexNormals) logstr += intersects[ 0 ].point.distanceTo(intersects[ 0 ].face.vertexNormals[i]);
+      console.log(logstr );
+      //intersects[ 0 ].face.color.setRGB( 0.8 * Math.random() + 0.2, 0, 0 );
+      //intersects[ 0 ].object.geometry.colorsNeedUpdate = true;
+		    // restore previous intersection object (if it exists) to its original color
+      //if ( INTERSECTED ) INTERSECTED.material.color.setHex( INTERSECTED.currentHex );
+			// store reference to closest object as current intersection object
+			INTERSECTED = intersects[ 0 ].face;
+      oldPosition = intersects[ 0 ].point;
+			// store color of closest object (for later restoration)
+      //INTERSECTED.currentHex = INTERSECTED.material.color.getHex();
+			// set a new color for closest object
+			//INTERSECTED.material.color.setHex( 0xffff00 );
+
+			// update text, if it has a "name" field.
+			if ( intersects[ 0 ].object.name )
+			{
+			  context.clearRect(0,0,640,480);
+				var message = intersects[ 0 ].object.name + toString( intersects[ 0 ].point);
+				var metrics = context1.measureText(message);
+				var width = metrics.width;
+				context.fillStyle = "rgba(0,0,0,0.95)"; // black border
+				context.fillRect( 0,0, width+8,20+8);
+				context1.fillStyle = "rgba(255,255,255,0.95)"; // white filler
+				context1.fillRect( 2,2, width+4,20+4 );
+				context1.fillStyle = "rgba(0,0,0,1)"; // text color
+				context1.fillText( message, 4,20 );
+				texture1.needsUpdate = true;
+			}
+			else
+			{
+				context.clearRect(0,0,300,300);
+				texture.needsUpdate = true;
+			}
+		}
+	}
+	else // there are no intersections
+	{
+		INTERSECTED = null;
+		context.clearRect(0,0,300,300);
+		texture.needsUpdate = true;
+	}
+
+}
