@@ -18,8 +18,8 @@
 
 <script type='text/javascript' src='js/DAT.GUI.min.js'></script>
 
-<script type='text/javascript' src='js/Three.plot.js'></script>
-  
+<script type='text/javascript' src='js/Three.surf.js'></script>
+
 <!-- http://silentmatt.com/javascript-expression-evaluator/ -->
 <script src="js/parser.js"></script>
 
@@ -49,7 +49,7 @@ This three.js demo is part of a collection at
  */
 
 // MAIN
-var projector, mouse = { x: 0, y: 0 }, INTERSECTED, oldPosition;
+  var projector, mouse = { x: 0, y: 0 }, INTERSECTED, oldPosition = {i:0,j:0};
 var sprite1;
 var canvas1, context1, texture1;
 
@@ -97,10 +97,10 @@ function init()
 	scene = new THREE.Scene();
 	// CAMERA
   var SCREEN_WIDTH = window.innerWidth , SCREEN_HEIGHT = window.innerHeight;
-	var VIEW_ANGLE = 45, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
+	var VIEW_ANGLE = 200, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
 	camera = new THREE.PerspectiveCamera( VIEW_ANGLE, ASPECT, NEAR, FAR);
 	scene.add(camera);
-	camera.position.set(0,150,400);
+	camera.position.set(300,300,300);
 	camera.lookAt(scene.position);
 	// RENDERER
 	if ( Detector.webgl )
@@ -209,7 +209,7 @@ function createGraph()
 	uRange = uMax - uMin;
 	vRange = vMax - vMin;
 	zFunc = Parser.parse(zFuncText).toJSFunction( ['u','v'] );
-  
+
   var data = [], labelX = [], labelY = [];
   for (var j = 0; j < segments; j++) labelY[j] = vRange * j/segments + vMin;
   for (var i = 0; i < segments; i++)
@@ -221,12 +221,12 @@ function createGraph()
       data[i][j] = zFunc(labelX[i],labelY[j]);//Math.sqrt(Math.sqrt(labelX[i] * labelX[i] + labelX[j] * labelX[j] )); //
       //sin(sqrt(a*x^2  + b*y^2))
     }
-  }   
+  }
   graphGeometry = new THREE.SurfGeometry( data, labelX, labelY, true );
 	///////////////////////////////////////////////
 	// calculate vertex colors based on Z values //
 	///////////////////////////////////////////////
-  setGeometryColor(graphGeometry)
+  //setGeometryColor(graphGeometry)
 	///////////////////////
 	// end vertex colors //
 	///////////////////////
@@ -235,6 +235,8 @@ function createGraph()
 	xMax = graphGeometry.boundingBox.max.x;
 	yMin = graphGeometry.boundingBox.min.y;
 	yMax = graphGeometry.boundingBox.max.y;
+  zMax = graphGeometry.boundingBox.max.z;
+  zMin = graphGeometry.boundingBox.min.z;
 
 	// material choices: vertexColorMaterial, wireMaterial , normMaterial , shadeMaterial
 
@@ -248,15 +250,25 @@ function createGraph()
   if (wireframeHelper) scene.remove(wireframeHelper);
 	wireMaterial.map.repeat.set( segments, segments );
 
+  var matrix	= new THREE.Matrix4();
+  matrix.makeScale(100 / (xMax - xMin), 100 / (yMax - yMin), 100 / (zMax - zMin) );
+  graphGeometry.applyMatrix(matrix);
+  graphGeometry.verticesNeedUpdate = true;
+  //THREE.GeometryUtils.scale(graphGeometry, scale);
+
 	graphMesh = new THREE.Mesh( graphGeometry, wireMaterial );
 	graphMesh.doubleSided = true;
   graphMesh.name = 'graphMesh';
-  graphMesh.position = new THREE.Vector3(0,0,4);
+
+
+
+  //graphMesh.position = new THREE.Vector3(0,0,4);
 	scene.add(graphMesh);
-  box = new THREE.BoundBoxHelper(graphMesh);
+  //box = new THREE.BoundBoxHelper(xMax - xMin, yMax - yMin, zMax- zMin, graphMesh.position);
+  box = new THREE.BoundBoxHelper(100,100,100, graphMesh.position);
 
   scene.add(box);
-  wireframeHelper = new THREE.VertexTangentsHelper  (graphMesh);
+  wireframeHelper = new THREE.WireframeHelper (graphMesh);
   scene.add(wireframeHelper);
  // initialize object to perform world/screen calculations
 	projector = new THREE.Projector();
@@ -285,35 +297,7 @@ function createGraph()
 	sprite1.position.set( 50, 50, 0 );
 	scene.add( sprite1 );
 }
-function setGeometryColor(geometry)
-{
-  geometry.computeBoundingBox();
-	zMin = geometry.boundingBox.min.z;
-	zMax = geometry.boundingBox.max.z;
-	zRange = zMax - zMin;
-	var color, point, face, numberOfSides, vertexIndex;
-	// faces are indexed using characters
-	var faceIndices = [ 'a', 'b', 'c', 'd' ];
-	// first, assign colors to vertices as desired
-	for ( var i = 0; i < geometry.vertices.length; i++ )
-	{
-		point = geometry.vertices[ i ];
-		color = new THREE.Color( 0x0000ff );
-		color.setHSL( 0.7 * (zMax - point.z) / zRange, 1, 0.5 );
-		geometry.colors[i] = color; // use this array for convenience
-	}
-	// copy the colors as necessary to the face's vertexColors array.
-	for ( var i = 0; i < geometry.faces.length; i++ )
-	{
-		face = geometry.faces[ i ];
-		numberOfSides = ( face instanceof THREE.Face3 ) ? 3 : 4;
-		for( var j = 0; j < numberOfSides; j++ )
-		{
-			vertexIndex = face[ faceIndices[ j ] ];
-			face.vertexColors[ j ] = geometry.colors[ vertexIndex ];
-		}
-	}
-}
+
 function onDocumentMouseMove( event )
 {
 	// the following line would stop any other event handler from firing
@@ -344,9 +328,10 @@ function resetCamera()
 {
 	// CAMERA
 	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
-	var VIEW_ANGLE = 45, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
+	var VIEW_ANGLE = 50, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
 	camera = new THREE.PerspectiveCamera( VIEW_ANGLE, ASPECT, NEAR, FAR);
-	camera.position.set( 2*xMax, 0.5*yMax, 4*zMax );
+  //camera.position.set( 2*xMax, 0.5*yMax, 4*zMax );
+  camera.position.set( 100, 100, 100 );
 	camera.up = new THREE.Vector3( 0, 0, 1 );
 	camera.lookAt(scene.position);
 	scene.add(camera);
@@ -357,7 +342,7 @@ function resetCamera()
 
 function animate()
 {
-    requestAnimationFrame( animate );
+  requestAnimationFrame( animate );
 	render();
 	update();
 }
@@ -380,26 +365,24 @@ function update()
 	if ( intersects.length > 0 )
 	{
 		// if the closest object intersected is not the currently stored intersection object
-		if ( intersects[ 0 ].face != INTERSECTED )
+
+    var d = intersects[ 0 ].face.c - intersects[ 0 ].face.a, i = Math.floor(intersects[ 0 ].face.c / d), j = intersects[ 0 ].face.c - i * d;
+
+		if ( intersects[ 0 ].face != INTERSECTED || (oldPosition.i !==i || oldPosition.j !==j ) )
 		{
-      console.log("Hit @ " + toString( intersects[0].point ) );
-      if(oldPosition) console.log(oldPosition.distanceTo( intersects[ 0 ].point ));
-      var logstr = ''; for(var i in intersects[ 0 ].face.vertexNormals) logstr += intersects[ 0 ].point.distanceTo(intersects[ 0 ].face.vertexNormals[i]);
-      console.log(logstr );
+
+
       //intersects[ 0 ].face.color.setRGB( 0.8 * Math.random() + 0.2, 0, 0 );
       //intersects[ 0 ].object.geometry.colorsNeedUpdate = true;
 		    // restore previous intersection object (if it exists) to its original color
       //if ( INTERSECTED ) INTERSECTED.material.color.setHex( INTERSECTED.currentHex );
 			// store reference to closest object as current intersection object
 			INTERSECTED = intersects[ 0 ].face;
-      oldPosition = intersects[ 0 ].point;
-			// store color of closest object (for later restoration)
-      //INTERSECTED.currentHex = INTERSECTED.material.color.getHex();
-			// set a new color for closest object
-			//INTERSECTED.material.color.setHex( 0xffff00 );
+      oldPosition = {i: i,j: j};
+
 
 			// update text, if it has a "name" field.
-			if ( intersects[ 0 ].object.name )
+			if ( intersects[ 0 ].object.name && keyboard.pressed("shift"))
 			{
 			  context1.clearRect(0,0,640,480);
 				var message = intersects[ 0 ].object.name + toString( intersects[ 0 ].point);
@@ -439,7 +422,7 @@ function update()
 	controls.update();
 	stats.update();
 }
-  function toString(v) { return "[ " + Math.floor(v.x * 100) / 100 + ", " + Math.floor(v.y * 100) / 100 + ", " + Math.floor(v.z * 100) / 100 + " ]"; }
+  function toString(v) { return "[ " + Math.floor(v.x * 1000) / 1000 + ", " + Math.floor(v.y * 1000) / 1000 + ", " + Math.floor(v.z * 1000) / 1000 + " ]"; }
 function render()
 {
 	renderer.render( scene, camera );
