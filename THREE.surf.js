@@ -60,14 +60,43 @@ THREE.SurfGeometry = function (  data, labelX, labelY, useTris) {
 		}
 
 	}
-
+  this.setGeometryColor();
 	this.computeCentroids();
 	this.computeFaceNormals();
 	this.computeVertexNormals();
 };
 
 THREE.SurfGeometry.prototype = Object.create( THREE.Geometry.prototype );
-
+THREE.SurfGeometry.prototype.setGeometryColor = function ()
+{
+  geometry = this;
+  geometry.computeBoundingBox();
+	zMin = geometry.boundingBox.min.z;
+	zMax = geometry.boundingBox.max.z;
+	zRange = zMax - zMin;
+	var color, point, face, numberOfSides, vertexIndex;
+	// faces are indexed using characters
+	var faceIndices = [ 'a', 'b', 'c', 'd' ];
+	// first, assign colors to vertices as desired
+	for ( var i = 0; i < geometry.vertices.length; i++ )
+	{
+		point = geometry.vertices[ i ];
+		color = new THREE.Color( 0x0000ff );
+		color.setHSL( 0.7 * (zMax - point.z) / zRange, 1, 0.5 );
+		geometry.colors[i] = color; // use this array for convenience
+	}
+	// copy the colors as necessary to the face's vertexColors array.
+	for ( var i = 0; i < geometry.faces.length; i++ )
+	{
+		face = geometry.faces[ i ];
+		numberOfSides = ( face instanceof THREE.Face3 ) ? 3 : 4;
+		for( var j = 0; j < numberOfSides; j++ )
+		{
+			vertexIndex = face[ faceIndices[ j ] ];
+			face.vertexColors[ j ] = geometry.colors[ vertexIndex ];
+		}
+	}
+}
 
 
 THREE.AxisGeometry = function ( width, height, depth, widthSegments, heightSegments, depthSegments ) {
@@ -175,35 +204,7 @@ THREE.AxisGeometry = function ( width, height, depth, widthSegments, heightSegme
 	this.mergeVertices();
   //this.setGeometryColor(this);
 };
-THREE.AxisGeometry.prototype.setGeometryColor = function (geometry)
-{
-  	geometry.computeBoundingBox();
-	zMin = geometry.boundingBox.min.z;
-	zMax = geometry.boundingBox.max.z;
-	zRange = zMax - zMin;
-	var color, point, face, numberOfSides, vertexIndex;
-	// faces are indexed using characters
-	var faceIndices = [ 'a', 'b', 'c', 'd' ];
-	// first, assign colors to vertices as desired
-	for ( var i = 0; i < geometry.vertices.length; i++ )
-	{
-		point = geometry.vertices[ i ];
-		color = new THREE.Color( 0x0000ff );
-		color.setHSL( 0.7 * (zMax - point.z) / zRange, 1, 0.5 );
-		geometry.colors[i] = color; // use this array for convenience
-	}
-	// copy the colors as necessary to the face's vertexColors array.
-	for ( var i = 0; i < geometry.faces.length; i++ )
-	{
-		face = geometry.faces[ i ];
-		numberOfSides = ( face instanceof THREE.Face3 ) ? 3 : 4;
-		for( var j = 0; j < numberOfSides; j++ )
-		{
-			vertexIndex = face[ faceIndices[ j ] ];
-			face.vertexColors[ j ] = geometry.colors[ vertexIndex ];
-		}
-	}
-}
+
 THREE.AxisGeometry.prototype = Object.create( THREE.Geometry.prototype );
 THREE.BoundBoxHelper = function (  width, height, depth, position, hex ) {
 
@@ -218,7 +219,7 @@ THREE.BoundBoxHelper = function (  width, height, depth, position, hex ) {
 	var max = geometry.boundingBox.max;
   */
   //THREE.Mesh.call( this, new THREE.AxisGeometry( max.x-min.x, max.y-min.y, max.z-min.z ,10,10,10), new THREE.MeshBasicMaterial( { color: color, wireframe: true } ) );
-  
+
   THREE.Mesh.call( this, new THREE.AxisGeometry(  width, height, depth, 10,10,10) );
   this.name = 'BoundBox';
   this.position = position;
@@ -231,7 +232,7 @@ THREE.Tooltip = function()
   this.mouse = {x:0,y:0};
   this.projector = new THREE.Projector();
   this.INTERSECTED = null;
-  this.oldPosition = null;
+  this.oldPosition = {i:0, j:0};
 
 	// create a canvas element
 	this.canvas = document.createElement('canvas');
@@ -252,7 +253,7 @@ THREE.Tooltip = function()
 	this.sprite.scale.set(200,100,1.0);
 	this.sprite.position.set( 50, 50, 0 );
 	this.add( this.sprite );
-  
+
 	document.addEventListener( 'mousemove', function( event ) {
     // event.preventDefault();
     // update sprite position
@@ -282,19 +283,14 @@ THREE.Tooltip.prototype.update = function()
 	if ( intersects.length > 0 )
 	{
 		// if the closest object intersected is not the currently stored intersection object
-		if ( intersects[ 0 ].face != INTERSECTED )
+    var d = intersects[ 0 ].face.c - intersects[ 0 ].face.a, i = Math.floor(intersects[ 0 ].face.c / d), j = intersects[ 0 ].face.c - i * d;
+
+		if ( intersects[ 0 ].face != INTERSECTED || (oldPosition.i !==i || oldPosition.j !==j ) )
 		{
-      console.log("Hit @ " + toString( intersects[0].point ) );
-      if(oldPosition) console.log(oldPosition.distanceTo( intersects[ 0 ].point ));
-      var logstr = ''; for(var i in intersects[ 0 ].face.vertexNormals) logstr += intersects[ 0 ].point.distanceTo(intersects[ 0 ].face.vertexNormals[i]);
-      console.log(logstr );
-      //intersects[ 0 ].face.color.setRGB( 0.8 * Math.random() + 0.2, 0, 0 );
-      //intersects[ 0 ].object.geometry.colorsNeedUpdate = true;
-		    // restore previous intersection object (if it exists) to its original color
-      //if ( INTERSECTED ) INTERSECTED.material.color.setHex( INTERSECTED.currentHex );
-			// store reference to closest object as current intersection object
+
+
 			INTERSECTED = intersects[ 0 ].face;
-      oldPosition = intersects[ 0 ].point;
+      oldPosition = {i,j}
 			// store color of closest object (for later restoration)
       //INTERSECTED.currentHex = INTERSECTED.material.color.getHex();
 			// set a new color for closest object
